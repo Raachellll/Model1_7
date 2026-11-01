@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ANTH3323 B06 — Photo Map (Custom v1)</title>
+<link rel="stylesheet" href="css/leaflet.css">
+<link rel="stylesheet" href="css/MarkerCluster.css">
+<link rel="stylesheet" href="css/MarkerCluster.Default.css">
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --line:#e2e5ea; --ink:#1d2129;
+    --muted:#6b7280; --accent:#865ecf; --accent2:#4eeb88; --sel:#ff8f00;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:"Open Sans","Helvetica Neue",Helvetica,"Noto Sans TC",Arial,sans-serif;font-size:14px}
+  header{background:#fff;border-bottom:1px solid var(--line);padding:10px 16px;display:flex;
+    align-items:baseline;gap:12px;flex-wrap:wrap}
+  header h1{margin:0;font-size:16px;font-weight:700}
+  header .sub{color:var(--muted);font-size:12px}
+  #app{display:grid;grid-template-columns:290px minmax(0,1fr) 380px;gap:12px;padding:12px;
+    align-items:stretch;height:calc(100vh - 52px)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .panel h2{margin:0;padding:10px 12px;font-size:13px;font-weight:700;letter-spacing:.02em;
+    border-bottom:1px solid var(--line);text-transform:uppercase;color:var(--muted)}
+  .panel-body{padding:10px 12px;overflow:auto;flex:1 1 auto;min-height:0}
+
+  /* ---- filters ---- */
+  .fgroup{margin-bottom:14px}
+  .fgroup h3{margin:0 0 6px;font-size:12px;font-weight:700;color:var(--ink);
+    display:flex;justify-content:space-between;align-items:center}
+  .fgroup h3 .cnt{color:var(--muted);font-weight:400}
+  .fbox{border:1px solid var(--line);border-radius:8px;max-height:190px;overflow:auto;padding:4px 6px}
+  .fbox.tall{max-height:240px}
+  label.chk{display:flex;gap:8px;align-items:flex-start;padding:3px 2px;cursor:pointer;line-height:1.35}
+  label.chk input{margin:2px 0 0;flex:0 0 auto}
+  label.chk .n{flex:1 1 auto;word-break:break-word}
+  label.chk .c{color:var(--muted);font-size:11px;flex:0 0 auto}
+  .btnrow{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+  button.btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:7px;
+    padding:5px 10px;font-size:12px;cursor:pointer}
+  button.btn:hover{background:#eef0f4}
+  button.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .search{width:100%;padding:5px 8px;border:1px solid var(--line);border-radius:7px;
+    margin-bottom:6px;font-size:12px}
+  .defs{margin-top:7px;font-size:11.5px;line-height:1.45;color:var(--muted)}
+  .defs div{padding:5px 8px;margin-bottom:5px;background:#fafbfc;
+    border-left:3px solid var(--accent);border-radius:0 6px 6px 0}
+  .defs b{display:block;color:var(--ink);font-size:12px;margin-bottom:1px}
+  .defs .raw{margin-left:5px;font-size:10.5px;opacity:.75;font-style:italic}
+  .countbox{border-top:1px solid var(--line);padding:8px 12px;font-size:12px;color:var(--muted);background:#fafbfc}
+  .countbox b{color:var(--ink);font-size:13px}
+  .legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;
+    border:1px solid #232323;margin-right:6px;vertical-align:middle}
+
+  /* ---- map ---- */
+  #mapwrap{padding:0}
+  #map{width:100%;height:100%;min-height:320px;background:#e8eaed;border-radius:0 0 9px 9px}
+  .leaflet-container{font-family:inherit}
+
+  /* ---- layer control (middle column) ---- */
+  .maphead{display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--line);padding:6px 12px 6px 12px;gap:8px}
+  .maphead h2{border:0;padding:0}
+  #layerBar{padding:8px 12px 10px;border-bottom:1px solid var(--line);background:#fcfcfd}
+  #layerBar.collapsed{display:none}
+  .lgroup{margin-bottom:8px}
+  .lgroup:last-of-type{margin-bottom:4px}
+  .ltitle{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
+    text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  button.mini{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:20px;
+    padding:1px 7px;font-size:10px;cursor:pointer;font-weight:600;text-transform:none}
+  button.mini:hover{background:#eef0f4;color:var(--ink)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
+    background:#fff;border-radius:20px;padding:4px 11px;font-size:12px;cursor:pointer;
+    user-select:none;line-height:1.3}
+  .chip:hover{border-color:#c9cfd8}
+  .chip input{margin:0;accent-color:var(--accent)}
+  .chip .n{color:var(--muted);font-size:11px}
+  .chip.on{background:#f2ecfb;border-color:#c9b6ee;color:#4a2f80;font-weight:600}
+  .chip.on .n{color:#6f52b0}
+  .chip.raster.on{background:#eaf4ee;border-color:#a9d9be;color:#256b45}
+  .lstatus{font-size:11px;color:var(--muted);margin-top:2px}
+
+  /* ---- photo / metadata ---- */
+  #photoEmpty{color:var(--muted);font-size:13px;text-align:center;padding:34px 12px;line-height:1.6}
+  #photoEmpty .big{font-size:30px;display:block;margin-bottom:8px;opacity:.5}
+  .photoimg{width:100%;display:block;border-radius:8px;background:#000;max-height:46vh;object-fit:contain}
+  .photobar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+  .badge{display:inline-block;background:#f0eafa;color:#5b3fa0;border-radius:20px;
+    padding:2px 10px;font-size:11px;font-weight:700}
+  table.meta{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  table.meta th{text-align:left;vertical-align:top;width:38%;padding:7px 8px 7px 0;color:var(--muted);
+    font-weight:600;border-bottom:1px solid #f0f1f4;text-transform:capitalize}
+  table.meta td{padding:7px 0;border-bottom:1px solid #f0f1f4;word-break:break-word}
+  .imgerr{background:#fff4f4;border:1px solid #f3c9c9;color:#a33;padding:10px;border-radius:8px;font-size:12px}
+
+  /* marker highlight */
+  path.sel-marker{stroke:#111 !important;stroke-width:4 !important;
+    filter:drop-shadow(0 0 5px rgba(255,143,0,.95));}
+  path.sel-halo{stroke:#ff8f00 !important;stroke-width:2.5 !important;
+    fill:none !important;stroke-opacity:.85;animation:haloFade 1.6s ease-in-out infinite alternate}
+  @keyframes haloFade{from{stroke-opacity:.85}to{stroke-opacity:.25}}
+
+  /* ---- responsive ---- */
+  @media (max-width:1180px){
+    #app{grid-template-columns:250px minmax(0,1fr);grid-template-rows:minmax(320px,1fr) auto;
+      height:auto;min-height:calc(100vh - 52px)}
+    #colPhoto{grid-column:1 / -1}
+    .photoimg{max-height:38vh}
+  }
+  @media (max-width:760px){
+    #app{grid-template-columns:1fr;grid-template-rows:auto 64vh auto;padding:8px;gap:8px}
+    #colFilters{order:1}
+    #colMap{order:2}
+    #colPhoto{order:3}
+    .fbox{max-height:150px}
+    .fbox.tall{max-height:170px}
+    header{padding:8px 12px}
+    #layerBar{padding:7px 10px 9px}
+    .chip{padding:3px 9px;font-size:11.5px}
+    #rasterHost{max-height:96px;overflow:auto}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>ANTH3323 · B06 Photo Survey</h1>
+  <span class="sub">Filters | Interactive Map | Photograph + Metadata</span>
+</header>
+
+<div id="app">
+  <!-- LEFT : FILTERS -->
+  <section class="panel" id="colFilters">
+    <h2>Filters</h2>
+    <div class="panel-body">
+      <div class="btnrow">
+        <button class="btn primary" id="btnAll">Select all</button>
+        <button class="btn" id="btnClear">Clear</button>
+      </div>
+      <div id="filterHost"></div>
+      <div class="fgroup">
+        <h3>Legend <span class="cnt">Place</span></h3>
+        <div class="legend" id="legendHost"></div>
+      </div>
+    </div>
+    <div class="countbox">Showing <b id="countNow">0</b> of <b id="countAll">0</b> records</div>
+  </section>
+
+  <!-- CENTER : MAP + LAYER CONTROL -->
+  <section class="panel" id="colMap">
+    <div class="maphead">
+      <h2>Interactive Map</h2>
+      <button class="btn" id="btnLayers" aria-expanded="true">Layers</button>
+    </div>
+    <div id="layerBar">
+      <div class="lgroup">
+        <span class="ltitle">Map layers</span>
+        <div class="chips" id="rasterHost"></div>
+      </div>
+      <div class="lstatus" id="layerStatus"></div>
+    </div>
+    <div class="panel-body" id="mapwrap"><div id="map"></div></div>
+  </section>
+
+  <!-- RIGHT : PHOTO + METADATA -->
+  <section class="panel" id="colPhoto">
+    <h2>Photograph + Metadata</h2>
+    <div class="panel-body" id="photoHost">
+      <div id="photoEmpty"><span class="big">&#9673;</span>Click a photo marker on the map<br>to view the image and its metadata.</div>
+    </div>
+  </section>
+</div>
+
+<script src="js/leaflet.js"></script>
+<script src="js/leaflet.markercluster.js"></script>
+<script src="data/ANTH3323_B06_template_V2_4.js"></script>
+<script>
+(function () {
+  /* ---------- 1. data (straight from the exported GeoJSON global) ---------- */
+  var SRC = window.json_ANTH3323_B06_template_V2_4;
+  var FEATURES = (SRC && SRC.features) ? SRC.features : [];
+
+  /* logical name -> actual attribute-table column(s) */
+  var FIELD = {
+    place_name:        ['Place'],
+    photo_subject:     ['Photo_Subject'],
+    location_precision:['Location Precision'],
+    photo_path:        ['Photo_Path'],
+    file_name:         ['File Name'],
+    capture_date:      ['Capture Date'],
+    direction:         ['Direction', 'direction', '拍攝方向', '方向'],
+    location_source:   ['Location_Source'],
+    notes:             ['Notes', 'notes', 'Note', 'Remarks', '備註', '备注'],
+    location_note:     ['Location Note']
+  };
+  function val(f, logical) {
+    var keys = FIELD[logical] || [logical];
+    for (var i = 0; i < keys.length; i++) {
+      var v = f.properties ? f.properties[keys[i]] : undefined;
+      if (v !== undefined && v !== null && String(v).trim() !== '') return String(v);
+    }
+    return '';
+  }
+  /* images/<flattened Photo_Path>  — same rule the original index.html uses */
+  function photoURL(f) {
+    var p = val(f, 'photo_path');
+    if (!p) return '';
+    return 'images/' + encodeURI(p.replace(/[\\/:]/g, '_').trim());
+  }
+
+  var PLACE_COLOR = { '田心村': '#865ecf', '䃟頭村': '#4eeb88' };
+  function placeColor(p) { return PLACE_COLOR[p] || '#cd8f6c'; }
+
+  /* English-only part of Photo_Subject: "Shrine / Tomb (海边伯公)" -> "Shrine / Tomb".
+     Display / grouping only — the underlying attribute values are never changed. */
+  function englishSubject(f) {
+    var s = val(f, 'photo_subject');
+    var i = s.indexOf('(');
+    var t = (i > -1 ? s.slice(0, i) : s).trim();
+    return t || '(uncategorised)';
+  }
+
+  /* ---------- 2. map + original raster ---------- */
+  var map = L.map('map', { zoomControl: true, maxZoom: 28, minZoom: 1 })
+    .fitBounds([[22.282462639800503, 113.91308470262639],
+                [22.295377075642097, 113.93737377619]]);
+  map.attributionControl.setPrefix('');
+
+  /* --- raster layers: same files + same bounds as the original index.html --- */
+  var RASTERS = [
+    { id: 'omp100', label: '2025 orthophoto (omp100)', pane: 'pane_omp100', z: 400, on: true,
+      url: 'data/omp100_2025_clipped_0.png',
+      bounds: [[22.258713230084844, 113.87447498509259], [22.33364164443673, 113.97475724974854]] },
+    { id: 'se9sea', label: 'Sheet 9SEA (1)', pane: 'pane_9SEA_1', z: 401, on: false,
+      url: 'data/9SEA_1.png',
+      bounds: [[22.273607952312364, 113.89769308407159], [22.300758044667496, 113.93413201704129]] },
+    { id: 'se7b2', label: '1963 sheet 63G9SE7B00 (2)', pane: 'pane_63G9SE7B00_2', z: 402, on: false,
+      url: 'data/63G9SE7B00_2_modified_2.png',
+      bounds: [[22.284409083734428, 113.91956801575293], [22.29000864626178, 113.92676051923566]] },
+    { id: 'se2d3', label: '1963 sheet 63G9SE2D00 (3)', pane: 'pane_63G9SE2D00_3', z: 403, on: false,
+      url: 'data/63G9SE2D00_3_modified_3.png',
+      bounds: [[22.28988683969813, 113.91953120057859], [22.295321587592102, 113.92685765023745]] }
+  ];
+  RASTERS.forEach(function (r) {
+    map.createPane(r.pane);
+    map.getPane(r.pane).style.zIndex = r.z;
+    r.layer = L.imageOverlay(r.url, r.bounds, { pane: r.pane });
+    if (r.on) r.layer.addTo(map);
+  });
+
+  /* markers must sit ABOVE every raster pane (400-402), like the original map's
+     pane_ANTH3323_B06_template_V2_4 at z-index 404 */
+  map.createPane('pane_photos');
+  map.getPane('pane_photos').style.zIndex = 500;
+
+  var cluster = L.markerClusterGroup({
+    showCoverageOnHover: false,
+    spiderfyDistanceMultiplier: 2,
+    maxClusterRadius: 45
+  }).addTo(map);
+
+  /* ---------- 3. markers ---------- */
+  var records = [], selected = null, halo = null;
+  FEATURES.forEach(function (f) {
+    var c = f.geometry && f.geometry.coordinates;
+    if (!c) return;
+    var m = L.circleMarker([c[1], c[0]], {
+      radius: 8, color: '#232323', weight: 1, opacity: 1,
+      fillColor: placeColor(val(f, 'place_name')), fillOpacity: 1,
+      pane: 'pane_photos'
+    });
+    m.feature = f;
+    m.bindTooltip(val(f, 'file_name') + ' · ' + val(f, 'place_name'),
+      { direction: 'top', offset: [0, -10] });
+    m.on('click', function () { selectSmart(m); });
+    records.push(m);
+  });
+
+  function clearHighlight() {
+    if (selected) {
+      selected.setStyle({ radius: 8, weight: 1, color: '#232323',
+        fillColor: placeColor(val(selected.feature, 'place_name')) });
+      var e = selected.getElement && selected.getElement();
+      if (e) e.classList.remove('sel-marker');
+    }
+    if (halo) { map.removeLayer(halo); halo = null; }
+    selected = null;
+  }
+  function select(m) {
+    clearHighlight();
+    selected = m;
+    m.setStyle({ radius: 11, weight: 4, color: '#111111', fillColor: '#ff8f00', fillOpacity: 1 });
+    var el = m.getElement && m.getElement();
+    if (el) el.classList.add('sel-marker');
+    var ll = m.getLatLng();
+    halo = L.circleMarker(ll, { radius: 17, color: '#ff8f00', weight: 2.5,
+      fill: false, opacity: .9, interactive: false, className: 'sel-halo',
+      pane: 'pane_photos' }).addTo(map);
+    if (!map.getBounds().pad(-0.15).contains(ll)) map.panTo(ll);
+    renderPhoto(m.feature);
+    if (window.matchMedia('(max-width:760px)').matches) {
+      document.getElementById('colPhoto').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+  /* when the target is not currently rendered (sits inside a cluster),
+     try to expand the cluster; always fall back to a direct selection   */
+  function selectSmart(m) {
+    var el = m.getElement && m.getElement();
+    if (el) { select(m); return; }
+    var done = false;
+    var fallback = setTimeout(function () {
+      if (!done && m.getElement && m.getElement()) { done = true; select(m); }
+    }, 1500);
+    try {
+      cluster.zoomToShowLayer(m, function () {
+        if (done) return;
+        done = true; clearTimeout(fallback); select(m);
+      });
+    } catch (e) {
+      clearTimeout(fallback); select(m);
+    }
+  }
+
+  /* ---------- 4. right panel ---------- */
+  var META_ROWS = ['file_name', 'place_name', 'capture_date', 'photo_subject',
+                   'direction', 'location_precision', 'location_source', 'notes', 'location_note'];
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function renderPhoto(f) {
+    var host = document.getElementById('photoHost');
+    var url = photoURL(f);
+    var rows = META_ROWS.map(function (k) {
+      var v = val(f, k);
+      if (!v) return '';
+      return '<tr><th scope="row">' + esc(k.replace(/_/g, ' ')) + '</th><td>' + esc(v) + '</td></tr>';
+    }).join('');
+    host.innerHTML =
+      '<div class="photobar"><span class="badge">' + esc(val(f, 'file_name')) + '</span>' +
+      '<button class="btn" id="btnDeselect">Clear selection</button></div>' +
+      (url ? '<img class="photoimg" src="' + url + '" alt="' + esc(val(f, 'file_name')) + '">' : '') +
+      '<table class="meta">' + rows + '</table>';
+    var img = host.querySelector('.photoimg');
+    if (img) {
+      img.addEventListener('error', function () {
+        var d = document.createElement('div');
+        d.className = 'imgerr';
+        d.textContent = 'Image not found: ' + decodeURI(url);
+        img.parentNode.replaceChild(d, img);
+      });
+    }
+    var b = document.getElementById('btnDeselect');
+    if (b) b.onclick = function () { clearHighlight(); renderEmpty(); };
+  }
+  function renderEmpty() {
+    document.getElementById('photoHost').innerHTML =
+      '<div id="photoEmpty"><span class="big">&#9673;</span>Click a photo marker on the map<br>to view the image and its metadata.</div>';
+  }
+
+  /* ---------- 5. filters (built from the attribute table) ---------- */
+  /* `labels` / `defs` only change what is DISPLAYED — the values used for
+     filtering still come straight from the attribute table, untouched.      */
+  var FILTERS = [
+    { key: 'place_name', label: 'Place', tall: false },
+    { key: 'photo_subject', label: 'Photo subject (English category)', tall: true, search: true,
+      sort: 'en', derive: englishSubject },
+    { key: 'location_precision', label: 'Location precision', tall: false,
+      labels: { 'Village-leve': 'Village-level' },
+      defs: [
+        { value: 'Village-leve', text: '只知道屬於某村落，marker 不代表精確拍攝點。' },
+        { value: 'Approximate', text: '位置由舊地圖、照片、筆記或其他線索估算，仍有不確定性。' }
+      ] }
+  ];
+  var state = {};   // key -> { value: bool }
+  /* value used for grouping/filtering; `derive` lets a filter group on a cleaned-up
+     form of the attribute (English-only subject) without touching the data */
+  function filterValue(f, fl) {
+    if (fl.derive) return fl.derive(f);
+    return val(f, fl.key) || '(blank)';
+  }
+  FILTERS.forEach(function (fl) {
+    var counts = {}, members = {};
+    FEATURES.forEach(function (f) {
+      var v = filterValue(f, fl);
+      counts[v] = (counts[v] || 0) + 1;
+      if (fl.derive) {                       // remember the original values behind each group
+        var raw = val(f, fl.key) || '(blank)';
+        if (!members[v]) members[v] = [];
+        if (members[v].indexOf(raw) === -1) members[v].push(raw);
+      }
+    });
+    var values = Object.keys(counts).sort(function (a, b) { return a.localeCompare(b, fl.sort || 'zh'); });
+    state[fl.key] = {};
+    values.forEach(function (v) { state[fl.key][v] = true; });
+
+    var wrap = document.createElement('div');
+    wrap.className = 'fgroup';
+    var html = '<h3>' + fl.label + ' <span class="cnt">' + values.length + '</span></h3>';
+    if (fl.search) html += '<input class="search" type="search" placeholder="Search subject…" data-for="' + fl.key + '">';
+    html += '<div class="fbox' + (fl.tall ? ' tall' : '') + '" id="box_' + fl.key + '">';
+    values.forEach(function (v) {
+      var disp = (fl.labels && fl.labels[v]) ? fl.labels[v] : v;
+      var tip = '';
+      if (members[v] && members[v].length) {
+        tip = ' title="' + members[v].length + ' Photo_Subject value(s): ' +
+              esc(members[v].join(' · ')) + '"';
+      } else if (disp !== v) {
+        tip = ' title="Attribute value: ' + esc(v) + '"';
+      }
+      html += '<label class="chk" data-v="' + esc(v) + '"' + tip + '><input type="checkbox" checked ' +
+              'data-key="' + fl.key + '" data-val="' + esc(v) + '">' +
+              '<span class="n">' + esc(disp) + '</span><span class="c">' + counts[v] + '</span></label>';
+    });
+    html += '</div>';
+    /* optional plain-language glossary under the checkboxes */
+    if (fl.defs) {
+      html += '<div class="defs">';
+      fl.defs.forEach(function (d) {
+        if (values.indexOf(d.value) === -1) return;   // only describe values that really exist
+        var disp = (fl.labels && fl.labels[d.value]) ? fl.labels[d.value] : d.value;
+        html += '<div><b>' + esc(disp) + '</b>' + esc(d.text) +
+                '<span class="raw">attribute value: ' + esc(d.value) + '</span></div>';
+      });
+      html += '</div>';
+    }
+    wrap.innerHTML = html;
+    document.getElementById('filterHost').appendChild(wrap);
+  });
+
+  /* legend */
+  document.getElementById('legendHost').innerHTML = Object.keys(PLACE_COLOR).map(function (p) {
+    return '<div><i style="background:' + PLACE_COLOR[p] + '"></i>' + esc(p) + '</div>';
+  }).join('');
+
+  document.getElementById('countAll').textContent = FEATURES.length;
+
+  /* ---------- 5b. layer control (map layers only) ---------- */
+  (function buildLayerBar() {
+    var host = document.getElementById('rasterHost');
+    RASTERS.forEach(function (r) {
+      var lab = document.createElement('label');
+      lab.className = 'chip raster' + (r.on ? ' on' : '');
+      lab.innerHTML = '<input type="checkbox"' + (r.on ? ' checked' : '') + ' data-raster="' + r.id + '">' +
+                      '<span>' + esc(r.label) + '</span>';
+      host.appendChild(lab);
+    });
+  })();
+
+  function passes(f) {
+    for (var i = 0; i < FILTERS.length; i++) {
+      var fl = FILTERS[i];
+      if (!state[fl.key][filterValue(f, fl)]) return false;
+    }
+    return true;
+  }
+  function apply() {
+    cluster.clearLayers();
+    var shown = [];
+    records.forEach(function (m) { if (passes(m.feature)) shown.push(m); });
+    if (shown.length) cluster.addLayers(shown);
+    document.getElementById('countNow').textContent = shown.length;
+    if (selected && shown.indexOf(selected) === -1) { clearHighlight(); renderEmpty(); }
+    document.getElementById('layerStatus').textContent =
+      shown.length + ' photo(s) on map · ' +
+      RASTERS.filter(function (r) { return map.hasLayer(r.layer); }).length + '/' + RASTERS.length + ' map layers on';
+    if (window.matchMedia('(max-width:1180px)').matches === false && shown.length) {
+      try { map.fitBounds(L.featureGroup(shown).getBounds().pad(0.12)); } catch (e) {}
+    }
+  }
+
+  /* raster chip toggles */
+  document.getElementById('rasterHost').addEventListener('change', function (e) {
+    var id = e.target.getAttribute('data-raster');
+    var r = RASTERS.filter(function (x) { return x.id === id; })[0];
+    if (!r) return;
+    if (e.target.checked) { map.addLayer(r.layer); } else { map.removeLayer(r.layer); }
+    e.target.parentNode.classList.toggle('on', e.target.checked);
+    apply();
+  });
+  document.getElementById('btnLayers').onclick = function () {
+    var bar = document.getElementById('layerBar');
+    bar.classList.toggle('collapsed');
+    this.setAttribute('aria-expanded', bar.classList.contains('collapsed') ? 'false' : 'true');
+    setTimeout(function () { map.invalidateSize(); }, 60);
+  };
+  /* on phones the layer bar starts collapsed so the map keeps the screen */
+  if (window.matchMedia('(max-width:760px)').matches) {
+    document.getElementById('layerBar').classList.add('collapsed');
+    document.getElementById('btnLayers').setAttribute('aria-expanded', 'false');
+    setTimeout(function () { map.invalidateSize(); }, 80);
+  }
+
+  document.getElementById('filterHost').addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.type !== 'checkbox') return;
+    state[t.getAttribute('data-key')][t.getAttribute('data-val')] = t.checked;
+    apply();
+  });
+  document.getElementById('filterHost').addEventListener('input', function (e) {
+    if (!e.target.classList.contains('search')) return;
+    var q = e.target.value.toLowerCase();
+    var labels = document.querySelectorAll('#box_' + e.target.getAttribute('data-for') + ' label.chk');
+    for (var i = 0; i < labels.length; i++) {
+      var txt = labels[i].textContent.toLowerCase();
+      labels[i].style.display = txt.indexOf(q) === -1 ? 'none' : '';
+    }
+  });
+  function setAll(on) {
+    var boxes = document.querySelectorAll('#filterHost input[type=checkbox]');
+    for (var i = 0; i < boxes.length; i++) {
+      boxes[i].checked = on;
+      state[boxes[i].getAttribute('data-key')][boxes[i].getAttribute('data-val')] = on;
+    }
+    apply();
+  }
+  document.getElementById('btnAll').onclick = function () { setAll(true); };
+  document.getElementById('btnClear').onclick = function () { setAll(false); };
+
+  apply();
+  window.addEventListener('resize', function () { map.invalidateSize(); });
+  /* expose the map for console inspection / debugging */
+  window.anthMap = map;
+})();
+</script>
+</body>
+</html>
